@@ -1,11 +1,11 @@
-const fs = require('fs');
-const { Octokit } = require('@octokit/rest');
+const fs = require("fs");
+const { Octokit } = require("@octokit/rest");
 
 const octokit = new Octokit({
   auth: process.env.GITHUB_TOKEN,
 });
 
-const organization = '<organization>';
+const organization = "MainProjectsB";
 
 async function collectCode() {
   let totalLinesOfCode = 0;
@@ -20,14 +20,14 @@ async function collectCode() {
     const contents = await octokit.repos.getContent({
       owner: organization,
       repo: repo.name,
-      path: '',
+      path: "",
     });
 
     for (const file of contents.data) {
-      if (file.type === 'file' && isCodeFile(file.name)) {
+      if (file.type === "file" && isCodeFile(file.name)) {
         const downloadUrl = file.download_url;
         const fileContent = await octokit.request(downloadUrl);
-        const linesOfCode = fileContent.data.split('\n').length;
+        const linesOfCode = fileContent.data.split("\n").length;
         totalLinesOfCode += linesOfCode;
       }
     }
@@ -39,14 +39,25 @@ async function collectCode() {
 }
 
 function isCodeFile(fileName) {
-  const extensions = ['.js', '.py', '.java'];
-  const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+  const extensions = [
+    ".js",
+    ".py",
+    ".java",
+    ".jsx",
+    ".html",
+    ".css",
+    ".scss",
+    ".saas",
+    ".ts",
+    ".tsx",
+  ];
+  const fileExtension = fileName.substring(fileName.lastIndexOf("."));
   return extensions.includes(fileExtension);
 }
 
 function updateReadme(linesOfCode) {
-  const readmeFilePath = 'README.md';
-  fs.readFile(readmeFilePath, 'utf-8', (err, data) => {
+  const readmeFilePath = "README.md";
+  fs.readFile(readmeFilePath, "utf-8", (err, data) => {
     if (err) throw err;
 
     const updatedData = data.replace(
@@ -54,14 +65,14 @@ function updateReadme(linesOfCode) {
       `Bu organizasyonda yer alan tüm projeler toplamda ${linesOfCode.toLocaleString()} satır koda sahiptir. Giderek büyüyoruz.`
     );
 
-    fs.writeFile(readmeFilePath, updatedData, 'utf-8', (err) => {
+    fs.writeFile(readmeFilePath, updatedData, "utf-8", (err) => {
       if (err) throw err;
-      console.log('README updated with code statistics');
+      console.log("README updated with code statistics");
     });
   });
 }
 
 collectCode().catch((error) => {
-  console.error('Error collecting code:', error);
+  console.error("Error collecting code:", error);
   process.exit(1);
 });
