@@ -1,9 +1,10 @@
-const fs = require('fs');
-const { Octokit } = require('@octokit/rest');
+const fs = require("fs");
+const { Octokit } = require("@octokit/rest");
+const { config } = require("./config");
 
 const octokit = new Octokit();
-
-const username = 'CihatKOCAK';
+console.log("Collecting code...");
+const username = config.userName;
 
 async function collectCode() {
   let totalLinesOfCode = 0;
@@ -15,22 +16,17 @@ async function collectCode() {
   for (const repo of repositories) {
     console.log(`Collecting code from ${repo.name}`);
 
-    const { data: contents } = await octokit.repos.getContent({
-      owner: username,
-      repo: repo.name,
-      path: '',
-    });
-
-    for (const file of contents) {
-      if (file.type === 'file' && isCodeFile(file.name)) {
-        const { data: fileContent } = await octokit.repos.getContent({
-          owner: username,
-          repo: repo.name,
-          path: file.path,
-        });
-        const linesOfCode = countLinesOfCode(fileContent);
-        totalLinesOfCode += linesOfCode;
+    try {
+      const linesOfCode = await getLinesOfCodeInRepo(username, repo.name);
+      totalLinesOfCode += linesOfCode;
+    } catch (error) {
+      if (error.status === 403) {
+        console.error("API rate limit exceeded. Please wait and try again later.");
+        return;
+      } else {
+        console.error(`Error collecting code from ${repo.name}:`, error);
       }
+      continue;
     }
   }
 
@@ -39,29 +35,54 @@ async function collectCode() {
   updateReadme(totalLinesOfCode);
 }
 
+async function getLinesOfCodeInRepo(owner, repo) {
+  let linesOfCode = 0;
+  let stack = [""];
+  let currentDir = "";
+
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    const { data: contents } = await octokit.repos.getContent({
+      owner: owner,
+      repo: repo,
+      path: dir,
+    });
+
+    for (const file of contents) {
+      if (file.type === "dir") {
+        stack.push(`${dir}${file.name}/`);
+      } else if (file.type === "file" && isCodeFile(file.name)) {
+        const { data: fileContent } = await octokit.repos.getContent({
+          owner: owner,
+          repo: repo,
+          path: file.path,
+        });
+        const content = Buffer.from(fileContent.content, "base64").toString("utf-8");
+        const fileLinesOfCode = countLinesOfCode(content);
+        linesOfCode += fileLinesOfCode;
+      }
+    }
+  }
+
+  return linesOfCode;
+}
+
 function isCodeFile(fileName) {
- const extensions = [
-    ".js",
-    ".py",
-    ".java",
-    ".jsx",
-    ".html",
-    ".css",
-    ".scss",
-    ".saas",
-    ".ts",
-    ".tsx",
-  ];
-  const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+  const extensions = config.extensions;
+  const fileExtension = fileName.substring(fileName.lastIndexOf("."));
   return extensions.includes(fileExtension);
 }
 
 function countLinesOfCode(fileContent) {
-  const lines = fileContent.split('\n');
+  const lines = fileContent.split("\n");
   let linesOfCode = 0;
 
   for (const line of lines) {
-    if (line.trim() !== '' && !line.trim().startsWith('//') && !line.trim().startsWith('/*')) {
+    if (
+      line.trim() !== "" &&
+      !line.trim().startsWith("//") &&
+      !line.trim().startsWith("/*")
+    ) {
       linesOfCode++;
     }
   }
@@ -70,23 +91,23 @@ function countLinesOfCode(fileContent) {
 }
 
 function updateReadme(linesOfCode) {
-  const readmeFilePath = 'README.md';
-  fs.readFile(readmeFilePath, 'utf-8', (err, data) => {
+  const readmeFilePath = config.readmeFileName;
+  fs.readFile(readmeFilePath, "utf-8", (err, data) => {
     if (err) throw err;
 
     const updatedData = data.replace(
-      /This profile contains a total of [\d,]+ lines of code across all projects\. We're growing steadily\./,
-      `This profile contains a total of ${linesOfCode.toLocaleString()} lines of code across all projects. We're growing steadily.`
+      new RegExp(`${config.message}[0-9]+`, "g"),
+      `${config.message}${linesOfCode}`
     );
 
-    fs.writeFile(readmeFilePath, updatedData, 'utf-8', (err) => {
+    fs.writeFile(readmeFilePath, updatedData, "utf-8", (err) => {
       if (err) throw err;
-      console.log('README updated with code statistics');
+      console.log("README updated with code statistics");
     });
   });
 }
 
 collectCode().catch((error) => {
-  console.error('Error collecting code:', error);
+  console.error("Error collecting code:", error);
   process.exit(1);
 });
