@@ -1,26 +1,29 @@
-name: Collect Code Statistics
+name: Update Readme
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 */24 * * *"
 
 jobs:
-  collect-code:
+  update-readme:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - name: Count Code for Backend
+        run: |
+          total_lines=$(curl -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/MainProjectsB/WE-ARE-THE-PARTY-BACKEND/contents?recursive=1" | jq -r '.[] | select(.type == "file" and (.name | endswith(".js", ".ts", ".jsx", ".css"))) | .size' | awk '{ total += $1 } END { print total }')
+          sed -i "s/Toplam Kod Satır Sayısı Proje A: .*/Toplam Kod Satır Sayısı Proje A: $total_lines/" README.md
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '14'
+      - name: Count Code for Frontend
+        run: |
+          total_lines=$(curl -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/MainProjectsB/WE-ARE-THE-PARTY-FRONT/contents?recursive=1" | jq -r '.[] | select(.type == "file" and (.name | endswith(".js", ".ts", ".jsx", ".css"))) | .size' | awk '{ total += $1 } END { print total }')
+          sed -i "s/Toplam Kod Satır Sayısı Proje B: .*/Toplam Kod Satır Sayısı Proje B: $total_lines/" README.md
 
-      - name: Install Dependencies
-        run: npm install
+      # Diğer projeler için de benzer şekilde adımlar ekleyebilirsiniz
 
-      - name: Collect Code Statistics
-        run: node collect-code.js
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update README
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git commit -am "Güncellenmiş kod sayıları"
+          git push
